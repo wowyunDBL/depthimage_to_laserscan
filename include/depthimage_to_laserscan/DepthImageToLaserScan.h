@@ -42,9 +42,23 @@
 #include <sstream>
 #include <limits.h>
 #include <math.h>
+#include <sstream>
+#include <fstream>
+#include <vector>
+#include <string>
+
+using namespace std;
 
 namespace depthimage_to_laserscan
 {
+  struct gridValueStruct{
+    int gridValue;
+    int count;
+
+    bool operator == (const int &now){
+        return (this->gridValue == now);
+    }
+  };
   class DepthImageToLaserScan
   {
   public:
@@ -153,6 +167,27 @@ namespace depthimage_to_laserscan
      */
     bool use_point(const float new_value, const float old_value, const float range_min, const float range_max) const;
 
+    double get_gridValue( vector<struct gridValueStruct> vec_gridValueStruct )const{
+      int max=0, tmp, tmpV;
+      double value;
+      for (int i=0;i<vec_gridValueStruct.size();i++)
+      {
+        // cout<<i<<' '<<endl;
+        tmp = vec_gridValueStruct[i].count;
+        tmpV = vec_gridValueStruct[i].gridValue;
+        if (max < tmp && tmpV != range_max_/0.05)
+        {
+            max = tmp;
+            cout << max<<endl;
+            value = tmpV;
+        }
+          
+      }
+      if (max == 0 )//|| max<5)
+          return range_max_/0.05;
+      return value;
+    }
+
     /**
     * Converts the depth image to a laserscan using the DepthTraits to assist.
     *
@@ -182,7 +217,9 @@ namespace depthimage_to_laserscan
 
       const int offset = (int)(center_y - scan_height/2);
       depth_row += offset*row_step; // Offset to center of image
-      vector<int> vector_diffLayer[640];
+      vector<struct gridValueStruct> vector_diffLayer[(int)depth_msg->width];
+      vector<struct gridValueStruct>::iterator it;
+      struct gridValueStruct gv;
 
       for(int v = offset; v < offset+scan_height_; ++v, depth_row += row_step)
       {
@@ -201,19 +238,65 @@ namespace depthimage_to_laserscan
 
             // Calculate actual distance
             r = hypot(x, z);
-            std::cout << "r: " << r << "; (int)r: " << (int)r << std::endl;
+            if (!(range_min_ <= r)){
+                r = 0;
+            }
+            else if(!(r <= range_max_)){
+                r = range_max_;
+            }
+            int now = (int)( (float)r/0.05+0.5 );
+            // std::cout << "r: " << r << "; (int)r: " << (int)r << std::endl;
+
+            it = std::find(vector_diffLayer[u].begin(), vector_diffLayer[u].end(), now);
+
+            if ( it != vector_diffLayer[u].end() )
+            {
+                it->count += 1;
+            }
+            else
+            {
+                gv.gridValue = now;
+                gv.count = 1;
+                vector_diffLayer[u].push_back( gv );
+            }
+
           }
-          vector_diffLayer[index].push_back( (int)(r/50) );
+          
           // // Determine if this point should be used.
           // if(use_point(r, scan_msg->ranges[index], scan_msg->range_min, scan_msg->range_max)){
           //   scan_msg->ranges[index] = r;
-          }
         }
       }
+    
+      double data;
+      double scan[(int)depth_msg->width];
+      for (int i = 0; i < (int)depth_msg->width; ++i)
+      {
+        data = get_gridValue( vector_diffLayer[i] ) * 0.05;
+        if (data>1e-2){
+            scan[i] = get_gridValue( vector_diffLayer[i] ) * 0.05;
+            scan_msg->ranges[(int)depth_msg->width-i-1] = scan[i];
+        }
+        else{
+            scan[i] = 0;
+            scan_msg->ranges[(int)depth_msg->width-i-1] = 0;
+        }
+        // cout << vector_diffLayer[i][i].count << endl;
+      }
 
-      // Determine if this point should be used.
-      if(use_point(r, scan_msg->ranges[index], scan_msg->range_min, scan_msg->range_max)){
-        scan_msg->ranges[index] = r;
+      std::ofstream newFile;
+      newFile.open("/home/ncslaber/transformed_laserScan_depth-2.csv", std::ios::out | std::ios::trunc);
+      if(!newFile)     
+        std::cout << "Can't open file!\n";
+      else
+        std::cout<<"File open successfully!\n";
+
+      for (const auto& e : scan) {
+          // std::cout << e << std::endl;
+          newFile << e << ',';
+      }
+      
+      newFile.close();
 
     }
 
@@ -225,7 +308,6 @@ namespace depthimage_to_laserscan
     int scan_height_; ///< Number of pixel rows to use when producing a laserscan from an area.
     std::string output_frame_id_; ///< Output frame_id for each laserscan.  This is likely NOT the camera's frame_id.
   };
-
 
 }; // depthimage_to_laserscan
 
