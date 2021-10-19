@@ -53,7 +53,6 @@
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/opencv.hpp>
 #include <ros/console.h>
-#include <time.h>
 
 using namespace std;
 const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
@@ -288,32 +287,19 @@ namespace depthimage_to_laserscan
       // cv::waitKey(0);
 
       /*get height mask*/
-      // fdepth.array() = (fdepth.array()<15000? fdepth.array(): 0);
-      // Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> maskDep = fdepth.array()<15000;
-      // writeToCSVfileBool("/home/ncslaber/maskDep-2_ros.csv", maskDep);
-      // fdepth = ( fdepth.array() * maskDep.array().cast<float>() ).matrix();
-
       double theta = 0./180.*3.1415926;
       Eigen::ArrayXf arrayPointY = Eigen::ArrayXf::LinSpaced(depth_msg->height, 0, depth_msg->height-1); 
       arrayPointY = arrayPointY - center_y;
-      
-      
-      auto diaPointY( arrayPointY.matrix().asDiagonal() ); 
-      
-      
-      Eigen::MatrixXf matPointY(diaPointY*fdepth);
-      matPointY = matPointY/ (-f_y);
+      Eigen::MatrixXf matPointY( arrayPointY.matrix().asDiagonal() ); 
+      matPointY = matPointY*fdepth/ f_y * (-1);
       matPointY = matPointY * cos(theta) + fdepth * sin(theta);
-      // matPointY = matPointY.array() + 410.0;
-      
-      
-      
+      matPointY = matPointY.array() + 410.0;
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask1 = matPointY.array()<900; 
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask2 = matPointY.array()>700; 
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask3 = matPointY.array()!=410;
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> matMaskingHeight = ( mask1.array() * mask2.array() ).matrix();
       matMaskingHeight = ( matMaskingHeight.array() * mask3.array() ).matrix();
-      writeToCSVfileBool("/home/ncslaber/matMaskingHeight-final_ros.csv", matMaskingHeight);
+      // writeToCSVfileBool("/home/ncslaber/matMaskingHeight-2_ros.csv", matMaskingHeight);
 
       // for(int v = offset; v < offset+scan_height_; ++v, depth_row += row_step)
       for(int v = 0; v < depth_msg->height; ++v, depth_row += row_step)
@@ -330,12 +316,12 @@ namespace depthimage_to_laserscan
               const double th = -atan2((double)(u - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
               const int index = (th - scan_msg->angle_min) / scan_msg->angle_increment;
 
-              // if (!(range_min_/unit_scaling <= r)){
-              //       r = 0;
-              // }
-              // else if(!(r <= range_max_/unit_scaling)){
-              //     r = range_max_/unit_scaling;
-              // }
+              if (!(range_min_/unit_scaling <= r)){
+                    r = 0;
+              }
+              else if(!(r <= range_max_/unit_scaling)){
+                  r = range_max_/unit_scaling;
+              }
 
               if (depthimage_to_laserscan::DepthTraits<T>::valid(r)){ // Not NaN or Inf in mm
                 // Calculate in XYZ
@@ -343,60 +329,57 @@ namespace depthimage_to_laserscan
                 double z = depthimage_to_laserscan::DepthTraits<T>::toMeters(r);
 
                 // Calculate actual distance
-                r = hypot(x, z);
+                // r = hypot(x, z);
                 
-                // int now = (int)( (float)r/50+0.5 );
-                // // std::cout << "r: " << r << "; (int)r: " << (int)r << std::endl;
+                int now = (int)( (float)r/50+0.5 );
+                // std::cout << "r: " << r << "; (int)r: " << (int)r << std::endl;
 
-                // it = std::find(vector_diffLayer[u].begin(), vector_diffLayer[u].end(), now);
+                it = std::find(vector_diffLayer[u].begin(), vector_diffLayer[u].end(), now);
 
-                // if ( it != vector_diffLayer[u].end() )
-                // {
-                //     it->count += 1;
-                // }
-                // else
-                // {
-                //     gv.gridValue = now;
-                //     gv.count = 1;
-                //     vector_diffLayer[u].push_back( gv );
-                // }
+                if ( it != vector_diffLayer[u].end() )
+                {
+                    it->count += 1;
+                }
+                else
+                {
+                    gv.gridValue = now;
+                    gv.count = 1;
+                    vector_diffLayer[u].push_back( gv );
+                }
 
               }
 
               else{
                 std::cout<<"depth is nan or zero!" << r << endl;
               }
-
-              if(use_point(r, scan_msg->ranges[index], scan_msg->range_min, scan_msg->range_max)){
-                scan_msg->ranges[index] = r;
-              }
+              
               // // Determine if this point should be used.
               // if(use_point(r, scan_msg->ranges[index], scan_msg->range_min, scan_msg->range_max)){
               //   scan_msg->ranges[index] = r;
-            // }
+            }
           }
         }
       }
     
-      // double data;
-      // double scan[(int)depth_msg->width];
-      // for (int i = 0; i < (int)depth_msg->width; ++i)
-      // {
-      //   if (i==(int)depth_msg->width-1)
-      //       data = (get_gridValue( vector_diffLayer[i], true )-1) * 0.05 + 0.025; // data in meter
-      //   else
-      //       data = (get_gridValue( vector_diffLayer[i], false )-1) * 0.05 + 0.025; // data in meter
+      double data;
+      double scan[(int)depth_msg->width];
+      for (int i = 0; i < (int)depth_msg->width; ++i)
+      {
+        if (i==(int)depth_msg->width-1)
+            data = (get_gridValue( vector_diffLayer[i], true )-1) * 0.05 + 0.025; // data in meter
+        else
+            data = (get_gridValue( vector_diffLayer[i], false )-1) * 0.05 + 0.025; // data in meter
         
-      //   // double x = (i - center_x) * data * constant_x;
-      //   // data = hypot(x, data*unit_scaling);
-      //   if (data>1e-2){
-      //       scan[i] = data;
-      //       scan_msg->ranges[(int)depth_msg->width-i-1] = scan[i];
-      //   }
-      //   else{
-      //       scan[i] = 0;
-      //       scan_msg->ranges[(int)depth_msg->width-i-1] = 0;
-      //   }
+        // double x = (i - center_x) * data * constant_x;
+        // data = hypot(x, data*unit_scaling);
+        if (data>1e-2){
+            scan[i] = data;
+            scan_msg->ranges[(int)depth_msg->width-i-1] = scan[i];
+        }
+        else{
+            scan[i] = 0;
+            scan_msg->ranges[(int)depth_msg->width-i-1] = 0;
+        }
         // cout << vector_diffLayer[i][i].count << endl;
       }
 
