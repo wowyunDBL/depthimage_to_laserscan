@@ -42,12 +42,20 @@
 #include <sstream>
 #include <limits.h>
 #include <math.h>
+
 #include <sstream>
 #include <fstream>
 #include <vector>
 #include <string>
+#include <Eigen/Dense>
+#include <cmath>
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/core/eigen.hpp>
+#include <opencv2/opencv.hpp>
+#include <ros/console.h>
 
 using namespace std;
+const static Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", "\n");
 
 namespace depthimage_to_laserscan
 {
@@ -167,7 +175,20 @@ namespace depthimage_to_laserscan
      */
     bool use_point(const float new_value, const float old_value, const float range_min, const float range_max) const;
 
-    double get_gridValue( vector<struct gridValueStruct> vec_gridValueStruct, bool flag )const{
+    void writeToCSVfileDouble(string name, Eigen::MatrixXf matrix) const
+    {
+        ofstream file(name.c_str());
+        file << matrix.format(CSVFormat);
+    }
+
+    void writeToCSVfileBool(string name, Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> matrix) const
+    {
+        ofstream file(name.c_str());
+        file << matrix.format(CSVFormat);
+    }
+
+    double get_gridValue( vector<struct gridValueStruct> vec_gridValueStruct, bool flag )const
+    {
       int max=0, tmp, tmpV;
       double value=0;
       for (int i=0;i<vec_gridValueStruct.size();i++)
@@ -186,28 +207,29 @@ namespace depthimage_to_laserscan
       if (max<4)
         value = (int)( (float)range_max_/0.05+0.5 );
 
-      std::ofstream inFile;
-      inFile.open("/home/ncslaber/transformed_laserScan_number-10_ros.csv", std::ios::out | std::ios_base::app);
-      if(!inFile)     
-        std::cout << "Can't open file!\n";
+      // std::ofstream inFile;
+      // inFile.open("/home/ncslaber/transformed_laserScan_number-2_ros.csv", std::ios::out | std::ios_base::app);
+      // if(!inFile)     
+      //   std::cout << "Can't open file!\n";
       
-      if (flag)
-        inFile << max ;
-      else
-          inFile << max << ',';
-      inFile.close();
+      // if (flag)
+      //   inFile << max ;
+      // else
+      //     inFile << max << ',';
+      // inFile.close();
 
       
-      std::ofstream in2File;
-      in2File.open("/home/ncslaber/transformed_laserScan_gridValue-10_ros.csv", std::ios::out | std::ios_base::app);
-      if(!in2File)     
-      std::cout << "Can't open file!\n";
+      // std::ofstream in2File;
+      // in2File.open("/home/ncslaber/transformed_laserScan_gridValue-2_ros.csv", std::ios::out | std::ios_base::app);
+      // if(!in2File)     
+      // std::cout << "Can't open file!\n";
       
-      if (flag)
-        in2File << value ;
-      else
-          in2File << value << ',';
-      in2File.close();
+      // if (flag)
+      //   in2File << value ;
+      // else
+      //     in2File << value << ',';
+      // in2File.close();
+
       return value;
     }
 
@@ -232,68 +254,109 @@ namespace depthimage_to_laserscan
       const float center_y = cam_model.cy();
 
       // Combine unit conversion (if necessary) with scaling by focal length for computing (X,Y)
-      const double unit_scaling = depthimage_to_laserscan::DepthTraits<T>::toMeters( T(1) );
+      const double unit_scaling = depthimage_to_laserscan::DepthTraits<T>::toMeters( T(1) ); //return 0.001
       const float constant_x = unit_scaling / cam_model.fx();
-
+      const float f_y = cam_model.fy();
+      
       const T* depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
       const int row_step = depth_msg->step / sizeof(T);
 
       const int offset = (int)(center_y - scan_height/2);
-      depth_row += offset*row_step; // Offset to center of image
+      // depth_row += offset*row_step; // Offset to center of image
       vector<struct gridValueStruct> vector_diffLayer[(int)depth_msg->width];
       vector<struct gridValueStruct>::iterator it;
       struct gridValueStruct gv;
 
-      for(int v = offset; v < offset+scan_height_; ++v, depth_row += row_step)
+      /*get depth cvMatrix*/
+      cv_bridge::CvImagePtr cv_ptr;
+      try
       {
-        for (int u = 0; u < (int)depth_msg->width; ++u) // Loop over each pixel in row
+        cv_ptr = cv_bridge::toCvCopy(depth_msg, sensor_msgs::image_encodings::TYPE_16UC1);  //BGR8
+      }
+      catch (cv_bridge::Exception& e)
+      {
+        ROS_ERROR("cv_bridge exception: %s", e.what());
+        return;
+      }
+      Eigen::MatrixXf fdepth(depth_msg->height, depth_msg->width);
+      cv::cv2eigen(cv_ptr->image, fdepth);
+      // writeToCSVfileDouble("/home/ncslaber/fdepth-2_ros.csv", fdepth);
+      // cv::namedWindow("Image window");
+      // cv::imshow("Image window", cv_ptr->image);
+      // cv::waitKey(0);
+
+      /*get height mask*/
+      double theta = 0./180.*3.1415926;
+      Eigen::ArrayXf arrayPointY = Eigen::ArrayXf::LinSpaced(depth_msg->height, 0, depth_msg->height-1); 
+      arrayPointY = arrayPointY - center_y;
+      Eigen::MatrixXf matPointY( arrayPointY.matrix().asDiagonal() ); 
+      matPointY = matPointY*fdepth/ f_y * (-1);
+      matPointY = matPointY * cos(theta) + fdepth * sin(theta);
+      matPointY = matPointY.array() + 410.0;
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask1 = matPointY.array()<900; 
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask2 = matPointY.array()>700; 
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask3 = matPointY.array()!=410;
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> matMaskingHeight = ( mask1.array() * mask2.array() ).matrix();
+      matMaskingHeight = ( matMaskingHeight.array() * mask3.array() ).matrix();
+      // writeToCSVfileBool("/home/ncslaber/matMaskingHeight-2_ros.csv", matMaskingHeight);
+
+      // for(int v = offset; v < offset+scan_height_; ++v, depth_row += row_step)
+      for(int v = 0; v < depth_msg->height; ++v, depth_row += row_step)
+      {
+        if ( matMaskingHeight.row(v).array().any() ) //
         {
-          const T depth = depth_row[u];
+          for (int u = 0; u < (int)depth_msg->width; ++u) // Loop over each pixel in row
+          {
+            if ( matMaskingHeight(v,u) == true )
+            {  
+              const T depth = depth_row[u];
 
-          double r = depth; // Assign to pass through NaNs and Infs
-          const double th = -atan2((double)(u - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
-          const int index = (th - scan_msg->angle_min) / scan_msg->angle_increment;
+              double r = depth; // Assign to pass through NaNs and Infs
+              const double th = -atan2((double)(u - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
+              const int index = (th - scan_msg->angle_min) / scan_msg->angle_increment;
 
-          if (!(range_min_/unit_scaling <= r)){
-                r = 0;
+              if (!(range_min_/unit_scaling <= r)){
+                    r = 0;
+              }
+              else if(!(r <= range_max_/unit_scaling)){
+                  r = range_max_/unit_scaling;
+              }
+
+              if (depthimage_to_laserscan::DepthTraits<T>::valid(r)){ // Not NaN or Inf in mm
+                // Calculate in XYZ
+                double x = (u - center_x) * r * constant_x;
+                double z = depthimage_to_laserscan::DepthTraits<T>::toMeters(r);
+
+                // Calculate actual distance
+                // r = hypot(x, z);
+                
+                int now = (int)( (float)r/50+0.5 );
+                // std::cout << "r: " << r << "; (int)r: " << (int)r << std::endl;
+
+                it = std::find(vector_diffLayer[u].begin(), vector_diffLayer[u].end(), now);
+
+                if ( it != vector_diffLayer[u].end() )
+                {
+                    it->count += 1;
+                }
+                else
+                {
+                    gv.gridValue = now;
+                    gv.count = 1;
+                    vector_diffLayer[u].push_back( gv );
+                }
+
+              }
+
+              else{
+                std::cout<<"depth is nan or zero!" << r << endl;
+              }
+              
+              // // Determine if this point should be used.
+              // if(use_point(r, scan_msg->ranges[index], scan_msg->range_min, scan_msg->range_max)){
+              //   scan_msg->ranges[index] = r;
             }
-          else if(!(r <= range_max_/unit_scaling)){
-              r = range_max_/unit_scaling;
           }
-
-          if (depthimage_to_laserscan::DepthTraits<T>::valid(depth)){ // Not NaN or Inf
-            // Calculate in XYZ
-            double x = (u - center_x) * depth * constant_x;
-            double z = depthimage_to_laserscan::DepthTraits<T>::toMeters(depth);
-
-            // Calculate actual distance
-            // r = hypot(x, z);
-            
-            int now = (int)( (float)r/50+0.5 );
-            // std::cout << "r: " << r << "; (int)r: " << (int)r << std::endl;
-
-            it = std::find(vector_diffLayer[u].begin(), vector_diffLayer[u].end(), now);
-
-            if ( it != vector_diffLayer[u].end() )
-            {
-                it->count += 1;
-            }
-            else
-            {
-                gv.gridValue = now;
-                gv.count = 1;
-                vector_diffLayer[u].push_back( gv );
-            }
-
-          }
-
-          else{
-            cout<<"depth is nan or zero!" <<depth<< endl;
-          }
-          
-          // // Determine if this point should be used.
-          // if(use_point(r, scan_msg->ranges[index], scan_msg->range_min, scan_msg->range_max)){
-          //   scan_msg->ranges[index] = r;
         }
       }
     
@@ -302,10 +365,12 @@ namespace depthimage_to_laserscan
       for (int i = 0; i < (int)depth_msg->width; ++i)
       {
         if (i==(int)depth_msg->width-1)
-            data = (get_gridValue( vector_diffLayer[i], true )-1) * 0.05+0.025; // data in meter
+            data = (get_gridValue( vector_diffLayer[i], true )-1) * 50. + 25.; // data in meter
         else
-            data = (get_gridValue( vector_diffLayer[i], false )-1) * 0.05+0.025; // data in meter
-
+            data = (get_gridValue( vector_diffLayer[i], false )-1) * 50. + 25.; // data in meter
+        
+        // double x = (i - center_x) * data * constant_x;
+        // data = hypot(x, data*unit_scaling);
         if (data>1e-2){
             scan[i] = data;
             scan_msg->ranges[(int)depth_msg->width-i-1] = scan[i];
@@ -317,8 +382,8 @@ namespace depthimage_to_laserscan
         // cout << vector_diffLayer[i][i].count << endl;
       }
 
-      std::ofstream newFile;
-      newFile.open("/home/ncslaber/transformed_laserScan_depth-10_ros.csv", std::ios::out | std::ios::trunc);
+      /*std::ofstream newFile;
+      newFile.open("/home/ncslaber/transformed_laserScan_depth-2_ros.csv", std::ios::out | std::ios::trunc);
       if(!newFile)     
         std::cout << "Can't open file!\n";
       else
@@ -332,7 +397,7 @@ namespace depthimage_to_laserscan
             newFile << ',';
         }
       }
-      newFile.close();
+      newFile.close();*/
 
     }
 
