@@ -302,9 +302,9 @@ namespace depthimage_to_laserscan
       for (int i = 0; i < (int)depth_msg->width; ++i)
       {
         if (i==(int)depth_msg->width-1)
-            data = (get_gridValue( vector_diffLayer[i], true )-1) * 0.05; // data in meter
+            data = (get_gridValue( vector_diffLayer[i], true )-1) * 0.05+0.025; // data in meter
         else
-            data = (get_gridValue( vector_diffLayer[i], false )-1) * 0.05; // data in meter
+            data = (get_gridValue( vector_diffLayer[i], false )-1) * 0.05+0.025; // data in meter
 
         if (data>1e-2){
             scan[i] = data;
