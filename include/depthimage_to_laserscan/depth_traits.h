@@ -45,7 +45,7 @@ template<typename T> struct DepthTraits {};
 template<>
 struct DepthTraits<uint16_t>
 {
-  static inline bool valid(uint16_t depth) { return depth != 0; }
+  static inline bool valid(uint16_t depth) { return depth >= 0; }
   static inline float toMeters(uint16_t depth) { return depth * 0.001f; } // originally mm
   static inline uint16_t fromMeters(float depth) { return (depth * 1000.0f) + 0.5f; }
   static inline void initializeBuffer(std::vector<uint8_t>& buffer) {} // Do nothing - already zero-filled

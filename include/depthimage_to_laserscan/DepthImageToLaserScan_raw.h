@@ -199,6 +199,7 @@ namespace depthimage_to_laserscan
 
             // Calculate actual distance
             r = hypot(x, z);
+            
           }
 
           // Determine if this point should be used.
