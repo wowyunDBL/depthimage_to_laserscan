@@ -39,7 +39,7 @@ DepthImageToLaserScan::DepthImageToLaserScan()
   : scan_time_(1./30.)
   , range_min_(0.45)
   , range_max_(10.0)
-  , scan_height_(1)
+  , scan_height_(20)
 {
 }
 
@@ -164,4 +164,13 @@ void DepthImageToLaserScan::set_scan_height(const int scan_height){
 
 void DepthImageToLaserScan::set_output_frame(const std::string& output_frame_id){
   output_frame_id_ = output_frame_id;
+}
+
+void DepthImageToLaserScan::set_show_mask(const bool& show_mask){
+  show_mask_ = show_mask;
+}
+
+void DepthImageToLaserScan::set_scan_height_limits(const int scan_height_min, const int scan_height_max){
+  scan_height_min_ = scan_height_min;
+  scan_height_max_ = scan_height_max;
 }

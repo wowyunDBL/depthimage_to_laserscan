@@ -44,7 +44,7 @@ DepthImageToLaserScanROS::DepthImageToLaserScanROS(ros::NodeHandle& n, ros::Node
   srv_.setCallback(f);
 
   // Lazy subscription to depth image topic
-  pub_ = n.advertise<sensor_msgs::LaserScan>("scan", 10, boost::bind(&DepthImageToLaserScanROS::connectCb, this, _1), boost::bind(&DepthImageToLaserScanROS::disconnectCb, this, _1));
+  pub_ = n.advertise<sensor_msgs::LaserScan>("scan", 1, boost::bind(&DepthImageToLaserScanROS::connectCb, this, _1), boost::bind(&DepthImageToLaserScanROS::disconnectCb, this, _1));
 }
 
 DepthImageToLaserScanROS::~DepthImageToLaserScanROS(){
@@ -88,4 +88,9 @@ void DepthImageToLaserScanROS::reconfigureCb(depthimage_to_laserscan::DepthConfi
     dtl_.set_range_limits(config.range_min, config.range_max);
     dtl_.set_scan_height(config.scan_height);
     dtl_.set_output_frame(config.output_frame_id);
+    dtl_.set_show_mask(config.show_mask);
+    dtl_.set_scan_height_limits(config.scan_height_min, config.scan_height_max);
+    std::cout<< "reconfigureCb: show_mask: " << config.show_mask <<std::endl;
+    std::cout<< "reconfigureCb: scan_height_min: " << config.scan_height_min  <<std::endl;
+    std::cout<< "reconfigureCb: scan_height_max: " << config.scan_height_max <<std::endl;
 }

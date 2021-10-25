@@ -136,6 +136,9 @@ namespace depthimage_to_laserscan
      */
     void set_output_frame(const std::string& output_frame_id);
 
+    void set_show_mask(const bool& show_mask);
+    void set_scan_height_limits(const int scan_height_min, const int scan_height_max);
+
   private:
     /**
      * Computes euclidean length of a cv::Point3d (as a ray from origin)
@@ -188,27 +191,25 @@ namespace depthimage_to_laserscan
         file << matrix.format(CSVFormat);
     }
 
-    double get_gridValue( vector<struct gridValueStruct> vec_gridValueStruct, bool flag )const
+    double get_gridValue( vector<struct gridValueStruct> vec_gridValueStruct, bool flag ) const
     {
       int max=0, tmp, tmpV;
       double value=0;
       for (int i=0;i<vec_gridValueStruct.size();i++)
       {
-        // cout<<i<<' '<<endl;
         tmp = vec_gridValueStruct[i].count;
         tmpV = vec_gridValueStruct[i].gridValue;
-        if (max < tmp)// && tmpV != range_max_/0.05)
+        if (max < tmp)
         {
             max = tmp;
-            // cout << max<<endl;
             value = tmpV;
         }
           
       }
-      if (max == 0)  //queue length is zero, outside range_max_
-        value = 1;
+      if (max == 0)  //queue length is zero means depth outside range_max_
+        value = -1;
 
-      if (max < 4 && max != 0)  //queue length is zero, outside range_max_
+      if (max < 4 && max != 0)  //density is small ...
         value = 0;
 
       // if (max < 4 && max != 0) //raw data is zero
@@ -315,15 +316,23 @@ namespace depthimage_to_laserscan
       matPointY = matPointY * cos(theta) + fdepth * sin(theta);
       matPointY = matPointY.array() + 410.0;      
       
-      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask1 = matPointY.array()<900; 
-      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask2 = matPointY.array()>700; 
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask1 = matPointY.array()<scan_height_max_; 
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask2 = matPointY.array()>scan_height_min_; 
       // Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask3 = matPointY.array()!=410;
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> matMaskingHeight = ( mask1.array() * mask2.array() ).matrix();
       // matMaskingHeight = ( matMaskingHeight.array() * mask3.array() ).matrix();
-      // writeToCSVfileBool("/home/ncslaber/matMaskingHeight-30_ros.csv", matMaskingHeight);
-
-      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> maskD = fdepth.array()<range_max_*1000; 
+      
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> maskD = fdepth.array()<=range_max_/unit_scaling; 
       matMaskingHeight = ( matMaskingHeight.array() * maskD.array() ).matrix();
+      bool show_mask_=true;
+      if (show_mask_)
+      {
+        cv::Mat test_image;
+        cv::eigen2cv(matMaskingHeight, test_image);
+        cv::threshold(test_image, test_image, 0, 255, cv::THRESH_BINARY);
+        cv::imshow("mask window", test_image);
+        cv::waitKey(1);
+      }
       // writeToCSVfileBool("/home/ncslaber/matMaskingHeight-30_ros_new.csv", matMaskingHeight);
 
       // for(int v = offset; v < offset+scan_height_; ++v, depth_row += row_step)
@@ -344,22 +353,19 @@ namespace depthimage_to_laserscan
               if (!(range_min_/unit_scaling <= r)){
                     r = 0;
               }
-              else if(!(r <= range_max_/unit_scaling)){
-                  r = range_max_/unit_scaling;
-              }
+              
 
               if (depthimage_to_laserscan::DepthTraits<T>::valid(r)){ // Not NaN or Inf in mm
-                // std::cout<<"depth is not nan or zero!" << r << endl;
                 // Calculate in XYZ
-                double x = (u - center_x) * r * constant_x;
-                double z = depthimage_to_laserscan::DepthTraits<T>::toMeters(r);
+                // double x = (u - center_x) * r * constant_x;
+                // double z = depthimage_to_laserscan::DepthTraits<T>::toMeters(r);
 
                 // Calculate actual distance
                 // r = hypot(x, z);
                 
+                /*grid filter*/
                 int now = (int)( (float)r/50+0.5 );
-                // std::cout << "r: " << r << "; (int)r: " << (int)r << std::endl;
-
+                
                 it = std::find(vector_diffLayer[u].begin(), vector_diffLayer[u].end(), now);
 
                 if ( it != vector_diffLayer[u].end() )
@@ -389,7 +395,7 @@ namespace depthimage_to_laserscan
       }
     
       double data;
-      double scan[(int)depth_msg->width];
+      // double scan[(int)depth_msg->width];
       for (int i = 0; i < (int)depth_msg->width; ++i)
       {
         if (i==(int)depth_msg->width-1)
@@ -397,25 +403,20 @@ namespace depthimage_to_laserscan
         else
             data = (get_gridValue( vector_diffLayer[i], false )-1) * 0.05 + 0.025; // data in meter
         
-        if (data == -0.025)
+        if (data > -0.025 && data < 0) // density is small
         {
-          double z_p = scan_msg->ranges[(int)depth_msg->width-i-1-1];
-          double z_pp = scan_msg->ranges[(int)depth_msg->width-i-1-2];
-          double x_p = ( i-1 - center_x) * z_p / cam_model.fx();
-          double x_pp = ( i-2 - center_x) * z_pp / cam_model.fx();
-          double slope = (z_p-z_pp)/(x_p-x_pp);
-          data = slope* (z_p / cam_model.fx()) +z_p;
-          data = 0;
+            data = 0;
         }
-        else if (data == 0.025){
+        else if (data < -0.03) // outside range
+        {
             data = range_max_;
         }
         double x = ( i - center_x) * data / cam_model.fx();
         data = hypot(x, data);
         
 
-        scan[i] = data;
-        scan_msg->ranges[(int)depth_msg->width-i-1] = scan[i];
+        // scan[i] = data;
+        scan_msg->ranges[(int)depth_msg->width-i-1] = data;
         
       }
 
@@ -447,7 +448,10 @@ namespace depthimage_to_laserscan
     float range_min_; ///< Stores the current minimum range to use.
     float range_max_; ///< Stores the current maximum range to use.
     int scan_height_; ///< Number of pixel rows to use when producing a laserscan from an area.
+    int scan_height_min_; ///< Number of pixel rows to use when producing a laserscan from an area.
+    int scan_height_max_; ///< Number of pixel rows to use when producing a laserscan from an area.
     std::string output_frame_id_; ///< Output frame_id for each laserscan.  This is likely NOT the camera's frame_id.
+    bool show_mask_; ///< Output frame_id for each laserscan.  This is likely NOT the camera's frame_id.
   };
 
 }; // depthimage_to_laserscan
