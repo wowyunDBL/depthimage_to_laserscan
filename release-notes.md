@@ -1,5 +1,11 @@
 # Occupancy Mapping Release Notes
 
+## [v0.2]
+
+2021-10-25
+
+- Check the extrcted layer
+
 ## [v0.1]
 
 2021-10-19
