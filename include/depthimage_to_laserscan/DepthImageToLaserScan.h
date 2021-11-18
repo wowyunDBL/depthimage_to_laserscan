@@ -318,9 +318,9 @@ namespace depthimage_to_laserscan
       
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask1 = matPointY.array()<scan_height_max_; 
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask2 = matPointY.array()>scan_height_min_; 
-      // Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask3 = matPointY.array()!=410;
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask3 = matPointY.array()!=410;
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> matMaskingHeight = ( mask1.array() * mask2.array() ).matrix();
-      // matMaskingHeight = ( matMaskingHeight.array() * mask3.array() ).matrix();
+      matMaskingHeight = ( matMaskingHeight.array() * mask3.array() ).matrix();
       
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> maskD = fdepth.array()<=7/unit_scaling; 
       matMaskingHeight = ( matMaskingHeight.array() * maskD.array() ).matrix();
