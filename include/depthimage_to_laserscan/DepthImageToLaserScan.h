@@ -304,7 +304,7 @@ namespace depthimage_to_laserscan
       // writeToCSVfileBool("/home/ncslaber/maskDep-2_ros.csv", maskDep);
       // fdepth = ( fdepth.array() * maskDep.array().cast<float>() ).matrix();
 
-      double theta = 0./180.*3.1415926;
+      double theta = 4.0/180.*3.1415926;
       Eigen::ArrayXf arrayPointY = Eigen::ArrayXf::LinSpaced(depth_msg->height, 0, depth_msg->height-1); 
       arrayPointY = arrayPointY - center_y;
            
@@ -325,13 +325,15 @@ namespace depthimage_to_laserscan
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> maskD = fdepth.array()<=range_max_/unit_scaling; 
       // std::cout<<"range_max_: " <<range_max_<<std::endl;
       matMaskingHeight = ( matMaskingHeight.array() * maskD.array() ).matrix();
-      bool show_mask_=true;
+      // bool show_mask_=true;
       if (show_mask_)
       {
         cv::Mat test_image;
         cv::eigen2cv(matMaskingHeight, test_image);
         cv::threshold(test_image, test_image, 0, 255, cv::THRESH_BINARY);
-        cv::imshow("mask window", test_image);
+        // test_image.resize((int)depth_msg->height/2,(int)depth_msg->width/2);
+        cv::resize( test_image,test_image, cv::Size((int)depth_msg->width/2,(int)depth_msg->height/2),0,0,cv::INTER_LINEAR );  
+        cv::imshow("mask window", test_image);  
         cv::waitKey(1);
       }
       // writeToCSVfileBool("/home/ncslaber/matMaskingHeight-30_ros_new.csv", matMaskingHeight);
@@ -440,7 +442,7 @@ namespace depthimage_to_laserscan
 
       end = clock();
       cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-      std::cout << "time for convert: " << cpu_time_used <<endl; //unit: s
+      // std::cout << "time for convert: " << cpu_time_used <<endl; //unit: s
     }
 
     image_geometry::PinholeCameraModel cam_model_; ///< image_geometry helper class for managing sensor_msgs/CameraInfo messages.
