@@ -416,11 +416,12 @@ namespace depthimage_to_laserscan
         }
         double x = ( i - center_x) * data / cam_model.fx();
         data = hypot(x, data);
-        
+        const double th = -atan2((double)(((int)depth_msg->width-i-1) - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
+        const int index = (th - scan_msg->angle_min) / scan_msg->angle_increment;
 
         // scan[i] = data;
-        scan_msg->ranges[(int)depth_msg->width-i-1] = data;
-        
+        // scan_msg->ranges[(int)depth_msg->width-i-1] = data; 
+        scan_msg->ranges[index] = data; 
       }
 
       /*std::ofstream newFile;
