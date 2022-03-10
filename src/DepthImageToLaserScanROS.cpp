@@ -90,7 +90,10 @@ void DepthImageToLaserScanROS::reconfigureCb(depthimage_to_laserscan::DepthConfi
     dtl_.set_output_frame(config.output_frame_id);
     dtl_.set_show_mask(config.show_mask);
     dtl_.set_scan_height_limits(config.scan_height_min, config.scan_height_max);
+    dtl_.set_extrinsic(config.ext_pitch, config.ext_height);
     std::cout<< "reconfigureCb: show_mask: " << config.show_mask <<std::endl;
     std::cout<< "reconfigureCb: scan_height_min: " << config.scan_height_min  <<std::endl;
     std::cout<< "reconfigureCb: scan_height_max: " << config.scan_height_max <<std::endl;
+    std::cout<< "reconfigureCb: ext_pitch: " << config.ext_pitch <<std::endl;
+    std::cout<< "reconfigureCb: ext_height: " << config.ext_height <<std::endl;
 }

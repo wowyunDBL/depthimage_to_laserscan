@@ -138,6 +138,7 @@ namespace depthimage_to_laserscan
 
     void set_show_mask(const bool& show_mask);
     void set_scan_height_limits(const int scan_height_min, const int scan_height_max);
+    void set_extrinsic(const float ext_pitch, const float ext_height);
 
   private:
     /**
@@ -208,9 +209,11 @@ namespace depthimage_to_laserscan
       }
       if (max == 0)  //queue length is zero means depth outside range_max_
         value = -1;
+        return value;
 
       if (max < 4 && max != 0)  //density is small ...
         value = 0;
+        return value;
 
       // if (max < 4 && max != 0) //raw data is zero
       //   value = 2;
@@ -304,21 +307,20 @@ namespace depthimage_to_laserscan
       // writeToCSVfileBool("/home/ncslaber/maskDep-2_ros.csv", maskDep);
       // fdepth = ( fdepth.array() * maskDep.array().cast<float>() ).matrix();
 
-      double theta = 4.0/180.*3.1415926;
+      double theta = ext_pitch_/180.*3.1415926; 
       Eigen::ArrayXf arrayPointY = Eigen::ArrayXf::LinSpaced(depth_msg->height, 0, depth_msg->height-1); 
       arrayPointY = arrayPointY - center_y;
            
       auto diaPointY( arrayPointY.matrix().asDiagonal() ); 
       
-      
       Eigen::MatrixXf matPointY(diaPointY*fdepth);
       matPointY = matPointY/ (-f_y);
-      matPointY = matPointY * cos(theta) + fdepth * sin(theta);
-      matPointY = matPointY.array() + 410.0;      
+      matPointY = matPointY * cos(theta) - fdepth * sin(theta);
+      matPointY = matPointY.array() + ext_height_;      
       
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask1 = matPointY.array()<scan_height_max_; 
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask2 = matPointY.array()>scan_height_min_; 
-      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask3 = matPointY.array()!=410;
+      Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask3 = matPointY.array()!=ext_height_;
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> matMaskingHeight = ( mask1.array() * mask2.array() ).matrix();
       matMaskingHeight = ( matMaskingHeight.array() * mask3.array() ).matrix();
       
@@ -406,17 +408,16 @@ namespace depthimage_to_laserscan
         else
             data = (get_gridValue( vector_diffLayer[i], false )-1) * 0.05 + 0.025; // data in meter
         
-        if (data > -0.025 && data < 0) // density is small
+        if (data < 0) 
         {
-            data = 0;
-        }
-        else if (data < -0.03) // outside range
-        {
+            // density is small for data=0.025
+            // outside range for data=-0.075
             data = range_max_;
         }
         double x = ( i - center_x) * data / cam_model.fx();
         data = hypot(x, data);
-        const double th = -atan2((double)(((int)depth_msg->width-i-1) - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
+        // const double th = -atan2((double)(((int)depth_msg->width-i-1) - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
+        const double th = -atan2((double)(i - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
         const int index = (th - scan_msg->angle_min) / scan_msg->angle_increment;
 
         // scan[i] = data;
@@ -451,6 +452,8 @@ namespace depthimage_to_laserscan
     float scan_time_; ///< Stores the time between scans.
     float range_min_; ///< Stores the current minimum range to use.
     float range_max_; ///< Stores the current maximum range to use.
+    float ext_pitch_;
+    float ext_height_;
     int scan_height_; ///< Number of pixel rows to use when producing a laserscan from an area.
     int scan_height_min_; ///< Number of pixel rows to use when producing a laserscan from an area.
     int scan_height_max_; ///< Number of pixel rows to use when producing a laserscan from an area.

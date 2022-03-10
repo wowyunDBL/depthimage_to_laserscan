@@ -174,3 +174,8 @@ void DepthImageToLaserScan::set_scan_height_limits(const int scan_height_min, co
   scan_height_min_ = scan_height_min;
   scan_height_max_ = scan_height_max;
 }
+
+void DepthImageToLaserScan::set_extrinsic(const float ext_pitch, const float ext_height){
+  ext_pitch_ = ext_pitch;
+  ext_height_ = ext_height;
+}
