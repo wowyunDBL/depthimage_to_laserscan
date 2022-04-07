@@ -29,4 +29,13 @@
     <remap from="base_scan" to="scan"/>
   </node>
   
+    <!-- extrinsic parameters: head down is positive -->
+    <param name="ext_pitch" value="-4.0"/> 
+    <param name="ext_roll" value="-2.0"/>
+    <param name="ext_height" value="410.0"/>
+
+    <param name="output_frame_id" value="camera_depth_frame"/>
+    <param name="show_mask" value="true"/>
+  </node>
+  
 </launch>

@@ -138,7 +138,7 @@ namespace depthimage_to_laserscan
 
     void set_show_mask(const bool& show_mask);
     void set_scan_height_limits(const int scan_height_min, const int scan_height_max);
-    void set_extrinsic(const float ext_pitch, const float ext_height);
+    void set_extrinsic(const float ext_pitch, const float ext_roll, const float ext_height);
 
   private:
     /**
@@ -273,6 +273,7 @@ namespace depthimage_to_laserscan
       const double unit_scaling = depthimage_to_laserscan::DepthTraits<T>::toMeters( T(1) ); //return 0.001
       const float constant_x = unit_scaling / cam_model.fx();
       const float f_y = cam_model.fy();
+      const float f_x = cam_model.fx();
       
       const T* depth_row = reinterpret_cast<const T*>(&depth_msg->data[0]);
       const int row_step = depth_msg->step / sizeof(T);
@@ -307,16 +308,22 @@ namespace depthimage_to_laserscan
       // writeToCSVfileBool("/home/ncslaber/maskDep-2_ros.csv", maskDep);
       // fdepth = ( fdepth.array() * maskDep.array().cast<float>() ).matrix();
 
-      double theta = ext_pitch_/180.*3.1415926; 
       Eigen::ArrayXf arrayPointY = Eigen::ArrayXf::LinSpaced(depth_msg->height, 0, depth_msg->height-1); 
       arrayPointY = arrayPointY - center_y;
-           
       auto diaPointY( arrayPointY.matrix().asDiagonal() ); 
+      Eigen::ArrayXf arrayPointX = Eigen::ArrayXf::LinSpaced(depth_msg->width, 0, depth_msg->width-1); 
+      arrayPointX = arrayPointX - center_x;
+      auto diaPointX( arrayPointX.matrix().asDiagonal() ); 
       
       Eigen::MatrixXf matPointY(diaPointY*fdepth);
       matPointY = matPointY/ (-f_y);
-      matPointY = matPointY * cos(theta) - fdepth * sin(theta);
-      matPointY = matPointY.array() + ext_height_;      
+      Eigen::MatrixXf matPointX(fdepth*diaPointX);
+      matPointX = matPointX/ (-f_x);
+
+      double theta = ext_pitch_/180.*3.1415926; 
+      double phi = ext_roll_/180*3.1415926;
+      matPointY = matPointX*sin(phi)+matPointY*cos(phi)*cos(theta)-fdepth*cos(phi)*sin(theta);
+      matPointY = matPointY.array()+ext_height_;
       
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask1 = matPointY.array()<scan_height_max_; 
       Eigen::Matrix<bool,Eigen::Dynamic,Eigen::Dynamic> mask2 = matPointY.array()>scan_height_min_; 
@@ -352,9 +359,7 @@ namespace depthimage_to_laserscan
               const T depth = depth_row[u];
               
               double r = depth; // Assign to pass through NaNs and Infs
-              const double th = -atan2((double)(u - center_x) * constant_x, unit_scaling); // Atan2(x, z), but depth divides out
-              const int index = (th - scan_msg->angle_min) / scan_msg->angle_increment;
-
+              
               if (!(range_min_/unit_scaling <= r)){
                     r = 0;
               }
@@ -453,6 +458,7 @@ namespace depthimage_to_laserscan
     float range_min_; ///< Stores the current minimum range to use.
     float range_max_; ///< Stores the current maximum range to use.
     float ext_pitch_;
+    float ext_roll_;
     float ext_height_;
     int scan_height_; ///< Number of pixel rows to use when producing a laserscan from an area.
     int scan_height_min_; ///< Number of pixel rows to use when producing a laserscan from an area.
